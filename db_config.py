@@ -6,7 +6,7 @@ def get_database_config():
     """取得資料庫連線設定 - 從 Streamlit Cloud Secrets 讀取"""
     return {
         'host': st.secrets.get('DB_HOST'),
-        'database': st.secrets.get('DB_NAME'),
+        'dbname': st.secrets.get('DB_NAME'),  # 注意：psycopg 使用 dbname 而非 database
         'user': st.secrets.get('DB_USER'),
         'password': st.secrets.get('DB_PASSWORD'),
         'port': st.secrets.get('DB_PORT', '5432'),
