@@ -1,17 +1,25 @@
 import psycopg
-import os
-from dotenv import load_dotenv
+import streamlit as st
 from contextlib import contextmanager
 
-# 載入 .env 檔案
-load_dotenv()
+def get_database_config():
+    """取得資料庫連線設定 - 從 Streamlit Cloud Secrets 讀取"""
+    return {
+        'host': st.secrets.get('DB_HOST'),
+        'database': st.secrets.get('DB_NAME'),
+        'user': st.secrets.get('DB_USER'),
+        'password': st.secrets.get('DB_PASSWORD'),
+        'port': st.secrets.get('DB_PORT', '5432'),
+        'sslmode': st.secrets.get('DB_SSLMODE', 'require')
+    }
 
 def get_connection():
     """建立資料庫連線"""
-    db_url = os.getenv("DATABASE_URL")
-    if not db_url:
-        raise RuntimeError("DATABASE_URL 環境變數未設定。請檢查 .env 檔案。")
-    return psycopg.connect(db_url)
+    try:
+        config = get_database_config()
+        return psycopg.connect(**config)
+    except Exception as e:
+        raise RuntimeError(f"❌ 資料庫連線失敗：{e}")
 
 @contextmanager
 def get_cursor():
