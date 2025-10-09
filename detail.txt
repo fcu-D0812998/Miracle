@@ -1,0 +1,131 @@
+#	table_schema	table_name	column_name	data_type
+1	public	companies	id	integer
+2	public	companies	type	character varying
+3	public	companies	name	character varying
+4	public	companies	split_rate	numeric
+5	public	companies	created_at	timestamp without time zone
+6	public	contracts	id	integer
+7	public	contracts	customer_id	integer
+8	public	contracts	kind	character varying
+9	public	contracts	start_date	date
+10	public	contracts	pay_mode_months	integer
+11	public	contracts	bw_included	integer
+12	public	contracts	color_included	integer
+13	public	contracts	bw_rate	numeric
+14	public	contracts	color_rate	numeric
+15	public	contracts	sales_company_id	integer
+16	public	contracts	maint_company_id	integer
+17	public	contracts	status	character varying
+18	public	contracts	created_at	timestamp without time zone
+19	public	contracts	end_date	date
+20	public	contracts	term_months	integer
+21	public	customers	id	integer
+22	public	customers	code	character varying
+23	public	customers	name	character varying
+24	public	customers	tax_id	character varying
+25	public	customers	contact	character varying
+26	public	customers	phone	character varying
+27	public	customers	email	character varying
+28	public	customers	address	character varying
+29	public	customers	created_at	timestamp without time zone
+30	public	devices	id	integer
+31	public	devices	contract_id	integer
+32	public	devices	serial_no	character varying
+33	public	devices	model	character varying
+34	public	devices	purchase_cost	numeric
+35	public	devices	extra_cost	numeric
+36	public	devices	amort_method	character varying
+37	public	devices	amort_end_date	date
+38	public	devices	created_at	timestamp without time zone
+39	public	devices	monthly_rent	numeric
+40	public	expenses	id	integer
+41	public	expenses	date	date
+42	public	expenses	type	character varying
+43	public	expenses	amount	numeric
+44	public	expenses	vendor	character varying
+45	public	expenses	staff_id	integer
+46	public	expenses	device_id	integer
+47	public	expenses	pass_through	boolean
+48	public	expenses	created_at	timestamp without time zone
+49	public	invoice_items	id	integer
+50	public	invoice_items	invoice_id	integer
+51	public	invoice_items	device_id	integer
+52	public	invoice_items	item_type	character varying
+53	public	invoice_items	qty	numeric
+54	public	invoice_items	rate	numeric
+55	public	invoice_items	amount	numeric
+56	public	invoice_items	note	text
+57	public	invoices	id	integer
+58	public	invoices	customer_id	integer
+59	public	invoices	invoice_no	character varying
+60	public	invoices	date	date
+61	public	invoices	period_start	date
+62	public	invoices	period_end	date
+63	public	invoices	total	numeric
+64	public	invoices	status	character varying
+65	public	invoices	created_at	timestamp without time zone
+66	public	meter_readings	id	integer
+67	public	meter_readings	device_id	integer
+68	public	meter_readings	period_start	date
+69	public	meter_readings	period_end	date
+70	public	meter_readings	bw_count	integer
+71	public	meter_readings	color_count	integer
+72	public	meter_readings	source	character varying
+73	public	meter_readings	created_at	timestamp without time zone
+74	public	payment_allocations	id	integer
+75	public	payment_allocations	payment_id	integer
+76	public	payment_allocations	invoice_id	integer
+77	public	payment_allocations	applied_amount	numeric
+78	public	payments	id	integer
+79	public	payments	customer_id	integer
+80	public	payments	date	date
+81	public	payments	method	character varying
+82	public	payments	amount	numeric
+83	public	payments	fee_amount	numeric
+84	public	payments	ref_no	character varying
+85	public	payments	note	text
+86	public	payments	created_at	timestamp without time zone
+87	public	pending_charges	id	integer
+88	public	pending_charges	contract_id	integer
+89	public	pending_charges	device_id	integer
+90	public	pending_charges	charge_type	character varying
+91	public	pending_charges	qty	numeric
+92	public	pending_charges	rate	numeric
+93	public	pending_charges	amount	numeric
+94	public	pending_charges	note	text
+95	public	pending_charges	status	character varying
+96	public	pending_charges	created_at	timestamp without time zone
+97	public	pending_charges	period_start	date
+98	public	pending_charges	period_end	date
+99	public	pending_charges	meter_reading_id	integer
+100	public	service_catalog	id	integer
+101	public	service_catalog	name	character varying
+102	public	service_catalog	unit	character varying
+103	public	service_catalog	price	numeric
+104	public	service_catalog	taxable	boolean
+105	public	service_catalog	active	boolean
+106	public	staff	id	integer
+107	public	staff	name	character varying
+108	public	staff	dept	character varying
+109	public	staff	monthly_salary	numeric
+110	public	staff	active	boolean
+111	public	users	id	integer
+112	public	users	username	character varying
+113	public	users	password_hash	character varying
+114	public	users	created_at	timestamp without time zone
+115	public	v_contract_rent	contract_id	integer
+116	public	v_contract_rent	customer_id	integer
+117	public	v_contract_rent	device_count	bigint
+118	public	v_contract_rent	total_monthly_rent	numeric
+119	public	v_customer_prepaid	customer_id	integer
+120	public	v_customer_prepaid	total_paid	numeric
+121	public	v_customer_prepaid	total_applied	numeric
+122	public	v_customer_prepaid	prepaid_balance	numeric
+123	public	v_invoice_balance	invoice_id	integer
+124	public	v_invoice_balance	invoice_no	character varying
+125	public	v_invoice_balance	customer_id	integer
+126	public	v_invoice_balance	invoice_date	date
+127	public	v_invoice_balance	total	numeric
+128	public	v_invoice_balance	received_amount	numeric
+129	public	v_invoice_balance	open_amount	numeric
+130	public	v_invoice_balance	balance_status	text
