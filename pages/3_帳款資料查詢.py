@@ -78,36 +78,40 @@ def edit_ar_dialog(ar_data):
             st.rerun()
 
 # ============================================
+# 搜尋功能（最上方）
+# ============================================
+search_term = st.text_input(
+    "🔍 搜尋帳款（可搜尋任何欄位）", 
+    placeholder="輸入合約編號、客戶名稱等...", 
+    label_visibility="collapsed"
+)
+
+st.divider()
+
+# ============================================
 # 日期選擇器和篩選選項
 # ============================================
-col_date, col_type, col_search = st.columns([1, 1, 2])
+col_date_from, col_date_to, col_type = st.columns([1, 1, 1])
 
-with col_date:
-    selected_date = st.date_input(
-        "選擇日期（篩選年月）",
-        value=date.today(),
-        key="date_selector"
+with col_date_from:
+    from_date = st.date_input(
+        "起始日期",
+        value=date(date.today().year, date.today().month, 1),  # 本月第一天
+        key="from_date_selector"
     )
 
-# 取得選擇的年月
-selected_year = selected_date.year
-selected_month = selected_date.month
+with col_date_to:
+    to_date = st.date_input(
+        "結束日期",
+        value=date.today(),
+        key="to_date_selector"
+    )
 
 with col_type:
     ar_type = st.selectbox(
         "帳款類型",
         options=["總應收帳款", "總未收帳款"],
         key="ar_type_select"
-    )
-
-# ============================================
-# 搜尋功能
-# ============================================
-with col_search:
-    search_term = st.text_input(
-        "🔍 搜尋帳款（可搜尋任何欄位）", 
-        placeholder="輸入合約編號、客戶名稱等...", 
-        label_visibility="collapsed"
     )
 
 st.divider()
@@ -118,7 +122,7 @@ st.divider()
 try:
     with get_connection() as conn:
         with conn.cursor() as cur:
-            # 查詢租賃應收帳款（篩選年月）
+            # 查詢租賃應收帳款（篩選日期區間）
             cur.execute("""
                 SELECT 
                     id,
@@ -133,12 +137,11 @@ try:
                     received_amount,
                     payment_status
                 FROM ar_leasing
-                WHERE EXTRACT(YEAR FROM start_date) = %s 
-                  AND EXTRACT(MONTH FROM start_date) = %s
-            """, (selected_year, selected_month))
+                WHERE start_date BETWEEN %s AND %s
+            """, (from_date, to_date))
             leasing_data = cur.fetchall()
             
-            # 查詢買斷應收帳款（篩選年月）
+            # 查詢買斷應收帳款（篩選日期區間）
             cur.execute("""
                 SELECT 
                     id,
@@ -153,16 +156,15 @@ try:
                     received_amount,
                     payment_status
                 FROM ar_buyout
-                WHERE EXTRACT(YEAR FROM deal_date) = %s 
-                  AND EXTRACT(MONTH FROM deal_date) = %s
-            """, (selected_year, selected_month))
+                WHERE deal_date BETWEEN %s AND %s
+            """, (from_date, to_date))
             buyout_data = cur.fetchall()
     
     # 合併資料
     all_data = leasing_data + buyout_data
     
     if not all_data:
-        st.info(f"📝 {selected_year}年{selected_month}月 沒有帳款資料")
+        st.info(f"📝 {from_date.strftime('%Y-%m-%d')} ~ {to_date.strftime('%Y-%m-%d')} 沒有帳款資料")
     else:
         # 轉換為 DataFrame
         columns = ['id', 'type', 'contract_code', 'customer_code', 'customer_name', 'date', 
@@ -184,7 +186,7 @@ try:
             total_fee = df['fee'].sum()
             
             # 顯示匯總資訊
-            st.subheader(f"📊 {selected_year}年{selected_month}月 總應收帳款")
+            st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總應收帳款")
             col1, col2 = st.columns(2)
             
             with col1:
@@ -204,7 +206,7 @@ try:
             total_unpaid = df['unpaid_amount'].sum()
             
             # 顯示匯總資訊
-            st.subheader(f"📊 {selected_year}年{selected_month}月 總未收帳款")
+            st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總未收帳款")
             st.metric(
                 label="💰 總未收金額",
                 value=f"NT$ {total_unpaid:,.0f}"
@@ -222,82 +224,80 @@ try:
         else:
             st.write(f"共 {len(df)} 筆帳款資料")
             
-            # 顯示每一筆帳款
-            for idx, row in df.iterrows():
-                with st.container(border=True):
-                    # 主要資訊顯示
-                    col1, col2, col3, col4, col5, col6, col7, col8, col9 = st.columns([0.8, 1.5, 1.5, 1, 1.2, 1, 1, 1, 0.6])
-                    
-                    with col1:
-                        st.write(f"**類型**")
-                        # 使用不同顏色標籤
-                        if row['type'] == '租賃':
-                            st.markdown("🔵 租賃")
-                        else:
-                            st.markdown("🟢 買斷")
-                    
-                    with col2:
-                        st.write(f"**合約編號**")
-                        st.write(row['contract_code'])
-                    
-                    with col3:
-                        st.write(f"**客戶名稱**")
-                        st.write(row['customer_name'])
-                    
-                    with col4:
-                        st.write(f"**日期**")
-                        st.write(row['date'].strftime('%Y-%m-%d') if row['date'] else "-")
-                    
-                    with col5:
-                        st.write(f"**金額**")
-                        st.write(f"NT$ {row['amount']:,.0f}" if row['amount'] else "-")
-                    
-                    with col6:
-                        st.write(f"**手續費**")
-                        st.write(f"NT$ {row['fee']:,.0f}" if row['fee'] else "-")
-                    
-                    with col7:
-                        st.write(f"**已收金額**")
-                        st.write(f"NT$ {row['received_amount']:,.0f}" if row['received_amount'] else "-")
-                    
-                    with col8:
-                        st.write(f"**繳費狀況**")
-                        # 根據繳費狀況顯示不同顏色
-                        status = row['payment_status']
-                        if status == '未收':
-                            st.markdown("🔴 未收")
-                        elif status == '部分收款':
-                            st.markdown("🟡 部分收款")
-                        elif status == '已收款':
-                            st.markdown("🟢 已收款")
-                        else:
-                            st.write(status if status else "-")
-                    
-                    with col9:
-                        # 編輯按鈕
-                        if st.button("✏️", key=f"edit_{row['type']}_{row['id']}", help="編輯"):
-                            edit_ar_dialog(row.to_dict())
-                    
-                    # 詳細資料展開
-                    with st.expander("📋 查看詳細資料"):
-                        col_detail1, col_detail2 = st.columns(2)
-                        
-                        with col_detail1:
-                            st.write(f"**客戶代碼：** {row['customer_code'] if row['customer_code'] else '-'}")
-                            if row['type'] == '租賃':
-                                st.write(f"**起始日期：** {row['date'].strftime('%Y-%m-%d') if row['date'] else '-'}")
-                                st.write(f"**結束日期：** {row['end_date'].strftime('%Y-%m-%d') if row['end_date'] else '-'}")
-                            else:
-                                st.write(f"**成交日期：** {row['date'].strftime('%Y-%m-%d') if row['date'] else '-'}")
-                        
-                        with col_detail2:
-                            # 計算應收總額（金額+手續費）
-                            total_receivable = (row['amount'] if row['amount'] else 0) + (row['fee'] if row['fee'] else 0)
-                            # 計算未收金額
-                            unpaid = total_receivable - (row['received_amount'] if row['received_amount'] else 0)
-                            
-                            st.write(f"**應收總額：** NT$ {total_receivable:,.0f}")
-                            st.write(f"**未收金額：** NT$ {unpaid:,.0f}")
+            # 編輯按鈕（表格上方）
+            col_edit, col_space = st.columns([1, 9])
+            
+            # 判斷是否有選擇資料
+            has_selection = 'selected_ar_id' in st.session_state and st.session_state['selected_ar_id'] is not None
+            
+            with col_edit:
+                if st.button("✏️ 編輯帳款", use_container_width=True, disabled=not has_selection, key="edit_ar_btn"):
+                    if has_selection:
+                        selected_id = st.session_state['selected_ar_id']
+                        selected_type = st.session_state['selected_ar_type']
+                        selected_row = df[(df['id'] == selected_id) & (df['type'] == selected_type)].iloc[0]
+                        edit_ar_dialog(selected_row.to_dict())
+            
+            st.divider()
+            
+            # 計算應收總額和未收金額欄位
+            df['total_receivable'] = (df['amount'].fillna(0) + df['fee'].fillna(0))
+            df['unpaid'] = df['total_receivable'] - df['received_amount'].fillna(0)
+            
+            # 準備顯示用的 DataFrame
+            display_df = df.copy()
+            display_df = display_df.rename(columns={
+                'type': '類型',
+                'contract_code': '合約編號',
+                'customer_code': '客戶代碼',
+                'customer_name': '客戶名稱',
+                'date': '日期',
+                'end_date': '結束日期',
+                'amount': '金額',
+                'fee': '手續費',
+                'received_amount': '已收金額',
+                'payment_status': '繳費狀況',
+                'total_receivable': '應收總額',
+                'unpaid': '未收金額'
+            })
+            
+            # 格式化日期和金額
+            display_df['日期'] = display_df['日期'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else '-')
+            display_df['結束日期'] = display_df['結束日期'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else '-')
+            display_df['金額'] = display_df['金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+            display_df['手續費'] = display_df['手續費'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+            display_df['已收金額'] = display_df['已收金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+            display_df['應收總額'] = display_df['應收總額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+            display_df['未收金額'] = display_df['未收金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+            
+            # 顯示表格
+            selection = st.dataframe(
+                display_df[['類型', '合約編號', '客戶代碼', '客戶名稱', '日期', '結束日期', 
+                           '金額', '手續費', '已收金額', '繳費狀況', '應收總額', '未收金額']],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="ar_table"
+            )
+            
+            # 更新選擇狀態
+            if selection and selection.selection.rows:
+                selected_idx = selection.selection.rows[0]
+                selected_row = df.iloc[selected_idx]
+                st.session_state['selected_ar_id'] = selected_row['id']
+                st.session_state['selected_ar_type'] = selected_row['type']
+            else:
+                st.session_state['selected_ar_id'] = None
+                st.session_state['selected_ar_type'] = None
+            
+            # 顯示已選擇的資料
+            if 'selected_ar_id' in st.session_state and st.session_state['selected_ar_id'] is not None:
+                selected_id = st.session_state['selected_ar_id']
+                selected_type = st.session_state['selected_ar_type']
+                if ((df['id'] == selected_id) & (df['type'] == selected_type)).any():
+                    selected_row = df[(df['id'] == selected_id) & (df['type'] == selected_type)].iloc[0]
+                    st.info(f"✓ 已選擇：{selected_row['contract_code']} - {selected_row['customer_name']} ({selected_row['type']})")
 
 except Exception as e:
     st.error(f"❌ 載入帳款資料失敗：{e}")

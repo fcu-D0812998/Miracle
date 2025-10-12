@@ -113,19 +113,9 @@ def edit_customer_dialog(customer_data):
             st.rerun()
 
 # ============================================
-# 新增按鈕
+# 搜尋功能（最上方）
 # ============================================
-col_btn, col_search = st.columns([1, 3])
-
-with col_btn:
-    if st.button("➕ 新增客戶", use_container_width=True, type="primary"):
-        add_customer_dialog()
-
-# ============================================
-# 搜尋功能
-# ============================================
-with col_search:
-    search_term = st.text_input("🔍 搜尋客戶（可搜尋任何欄位）", placeholder="輸入客戶代碼、名稱、聯絡人、手機等...", label_visibility="collapsed")
+search_term = st.text_input("🔍 搜尋客戶（可搜尋任何欄位）", placeholder="輸入客戶代碼、名稱、聯絡人、手機等...", label_visibility="collapsed")
 
 st.divider()
 
@@ -147,7 +137,7 @@ try:
     if not customers:
         st.info("📝 目前沒有客戶資料")
     else:
-        # 轉換為 DataFrame 進行搜尋
+        # 轉換為 DataFrame
         columns = ['id', 'customer_code', 'name', 'contact_name', 'mobile', 'phone', 
                    'address', 'email', 'tax_id', 'sales_rep_name', 'remark']
         df = pd.DataFrame(customers, columns=columns)
@@ -162,76 +152,99 @@ try:
         else:
             st.write(f"共 {len(df)} 筆客戶資料")
             
-            # 顯示每一筆客戶資料
-            for idx, row in df.iterrows():
-                with st.container(border=True):
-                    # 主要資訊顯示
-                    col1, col2, col3, col4, col5, col6 = st.columns([1.5, 2, 1.5, 1.5, 1.5, 1])
-                    
-                    with col1:
-                        st.write(f"**客戶代碼**")
-                        st.write(row['customer_code'])
-                    
-                    with col2:
-                        st.write(f"**客戶名稱**")
-                        st.write(row['name'])
-                    
-                    with col3:
-                        st.write(f"**聯絡人**")
-                        st.write(row['contact_name'] if row['contact_name'] else "-")
-                    
-                    with col4:
-                        st.write(f"**手機**")
-                        st.write(row['mobile'] if row['mobile'] else "-")
-                    
-                    with col5:
-                        st.write(f"**統編**")
-                        st.write(row['tax_id'] if row['tax_id'] else "-")
-                    
-                    with col6:
-                        # 編輯按鈕
-                        if st.button("✏️", key=f"edit_{row['id']}", help="編輯"):
-                            edit_customer_dialog(row.to_dict())
-                        
-                        # 刪除按鈕
-                        if st.button("🗑️", key=f"delete_{row['id']}", help="刪除"):
-                            st.session_state[f"confirm_delete_{row['id']}"] = True
+            # 三個按鈕在同一行（表格上方）
+            col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
+            
+            # 需要先初始化 has_selection 和 selected_row
+            # 先顯示按鈕（狀態根據 session_state 中的選擇）
+            has_selection = 'selected_customer_id' in st.session_state and st.session_state['selected_customer_id'] is not None
+            
+            with col_add:
+                if st.button("➕ 新增客戶", use_container_width=True, type="primary"):
+                    add_customer_dialog()
+            
+            with col_edit:
+                if st.button("✏️ 編輯客戶", use_container_width=True, disabled=not has_selection):
+                    if has_selection:
+                        # 從 df 中找到選擇的資料
+                        selected_id = st.session_state['selected_customer_id']
+                        selected_row = df[df['id'] == selected_id].iloc[0]
+                        edit_customer_dialog(selected_row.to_dict())
+            
+            with col_delete:
+                if st.button("🗑️ 刪除客戶", use_container_width=True, disabled=not has_selection):
+                    if has_selection:
+                        selected_id = st.session_state['selected_customer_id']
+                        st.session_state['confirm_delete_selected'] = selected_id
+            
+            st.divider()
+            
+            # 準備顯示用的 DataFrame（隱藏 id，重新命名欄位）
+            display_df = df.copy()
+            display_df = display_df.rename(columns={
+                'customer_code': '客戶代碼',
+                'name': '客戶名稱',
+                'contact_name': '聯絡人',
+                'mobile': '手機',
+                'phone': '電話',
+                'address': '地址',
+                'email': 'Email',
+                'tax_id': '統編',
+                'sales_rep_name': '負責業務姓名',
+                'remark': '備註'
+            })
+            
+            # 顯示 DataFrame 表格（可選擇、可排序）
+            selection = st.dataframe(
+                display_df[['客戶代碼', '客戶名稱', '聯絡人', '手機', '電話', '地址', 'Email', '統編', '負責業務姓名', '備註']],
+                use_container_width=True,
+                hide_index=True,
+                on_select="rerun",
+                selection_mode="single-row",
+                key="customer_table"
+            )
+            
+            # 更新選擇狀態
+            if selection and selection.selection.rows:
+                selected_idx = selection.selection.rows[0]
+                selected_row = df.iloc[selected_idx]
+                st.session_state['selected_customer_id'] = selected_row['id']
+            else:
+                st.session_state['selected_customer_id'] = None
+            
+            # 顯示已選擇的資料
+            if 'selected_customer_id' in st.session_state and st.session_state['selected_customer_id'] is not None:
+                selected_id = st.session_state['selected_customer_id']
+                if selected_id in df['id'].values:
+                    selected_row = df[df['id'] == selected_id].iloc[0]
+                    st.info(f"✓ 已選擇：{selected_row['name']} ({selected_row['customer_code']})")
                     
                     # 刪除確認
-                    if st.session_state.get(f"confirm_delete_{row['id']}", False):
-                        st.warning(f"⚠️ 確定要刪除客戶「{row['name']}」嗎？")
-                        col_yes, col_no, col_space = st.columns([1, 1, 8])
+                    if st.session_state.get('confirm_delete_selected') == selected_id:
+                        st.warning(f"⚠️ 確定要刪除客戶「{selected_row['name']}」嗎？此操作無法復原！")
+                        col_yes, col_no, col_space2 = st.columns([1, 1, 8])
                         
                         with col_yes:
-                            if st.button("✅ 確定", key=f"confirm_yes_{row['id']}"):
+                            if st.button("✅ 確定刪除", use_container_width=True):
                                 try:
                                     with get_connection() as conn:
                                         with conn.cursor() as cur:
-                                            cur.execute("DELETE FROM customers WHERE id = %s", (row['id'],))
+                                            cur.execute("DELETE FROM customers WHERE id = %s", (selected_id,))
                                             conn.commit()
                                     st.success("✅ 刪除成功！")
-                                    del st.session_state[f"confirm_delete_{row['id']}"]
+                                    if 'confirm_delete_selected' in st.session_state:
+                                        del st.session_state['confirm_delete_selected']
+                                    if 'selected_customer_id' in st.session_state:
+                                        del st.session_state['selected_customer_id']
                                     st.rerun()
                                 except Exception as e:
                                     st.error(f"❌ 刪除失敗：{e}")
                         
                         with col_no:
-                            if st.button("❌ 取消", key=f"confirm_no_{row['id']}"):
-                                del st.session_state[f"confirm_delete_{row['id']}"]
+                            if st.button("❌ 取消", use_container_width=True):
+                                if 'confirm_delete_selected' in st.session_state:
+                                    del st.session_state['confirm_delete_selected']
                                 st.rerun()
-                    
-                    # 詳細資料展開
-                    with st.expander("📋 查看詳細資料"):
-                        col_detail1, col_detail2 = st.columns(2)
-                        
-                        with col_detail1:
-                            st.write(f"**電話：** {row['phone'] if row['phone'] else '-'}")
-                            st.write(f"**Email：** {row['email'] if row['email'] else '-'}")
-                            st.write(f"**負責業務姓名：** {row['sales_rep_name'] if row['sales_rep_name'] else '-'}")
-                        
-                        with col_detail2:
-                            st.write(f"**地址：** {row['address'] if row['address'] else '-'}")
-                            st.write(f"**備註：** {row['remark'] if row['remark'] else '-'}")
 
 except Exception as e:
     st.error(f"❌ 載入客戶資料失敗：{e}")

@@ -577,32 +577,20 @@ def edit_buyout_dialog(contract_data):
             st.rerun()
 
 # ============================================
-# 選擇合約類型
+# 搜尋功能（最上方）
 # ============================================
-col_type, col_btn, col_search = st.columns([1, 1, 2])
-
-with col_type:
-    contract_type = st.selectbox(
-        "合約類型",
-        options=["租賃合約", "買斷合約"],
-        key="contract_type_select"
-    )
-
-with col_btn:
-    if contract_type == "租賃合約":
-        if st.button("➕ 新增租賃合約", use_container_width=True, type="primary"):
-            add_leasing_dialog()
-    else:
-        if st.button("➕ 新增買斷合約", use_container_width=True, type="primary"):
-            add_buyout_dialog()
-
-# ============================================
-# 搜尋功能
-# ============================================
-with col_search:
-    search_term = st.text_input("🔍 搜尋合約（可搜尋任何欄位）", placeholder="輸入合約編號、客戶名稱等...", label_visibility="collapsed")
+search_term = st.text_input("🔍 搜尋合約（可搜尋任何欄位）", placeholder="輸入合約編號、客戶名稱等...", label_visibility="collapsed")
 
 st.divider()
+
+# ============================================
+# 選擇合約類型
+# ============================================
+contract_type = st.selectbox(
+    "合約類型",
+    options=["租賃合約", "買斷合約"],
+    key="contract_type_select"
+)
 
 # ============================================
 # 顯示租賃合約
@@ -641,86 +629,112 @@ if contract_type == "租賃合約":
             else:
                 st.write(f"共 {len(df)} 筆租賃合約")
                 
-                # 顯示每一筆合約
-                for idx, row in df.iterrows():
-                    with st.container(border=True):
-                        # 主要資訊顯示
-                        col1, col2, col3, col4, col5, col6, col7, col8 = st.columns([1.5, 1.5, 1, 1.5, 0.8, 1, 1, 0.8])
-                        
-                        with col1:
-                            st.write(f"**合約編號**")
-                            st.write(row['contract_code'])
-                        
-                        with col2:
-                            st.write(f"**客戶名稱**")
-                            st.write(row['customer_name'])
-                        
-                        with col3:
-                            st.write(f"**起始日**")
-                            st.write(row['start_date'].strftime('%Y-%m-%d') if row['start_date'] else "-")
-                        
-                        with col4:
-                            st.write(f"**機型**")
-                            st.write(row['model'] if row['model'] else "-")
-                        
-                        with col5:
-                            st.write(f"**台數**")
-                            st.write(f"{row['quantity']} 台" if row['quantity'] else "-")
-                        
-                        with col6:
-                            st.write(f"**月租金**")
-                            st.write(f"NT$ {row['monthly_rent']:,.0f}" if row['monthly_rent'] else "-")
-                        
-                        with col7:
-                            st.write(f"**合約期數**")
-                            st.write(f"{row['contract_months']} 月" if row['contract_months'] else "-")
-                        
-                        with col8:
-                            # 編輯按鈕
-                            if st.button("✏️", key=f"edit_l_{row['id']}", help="編輯"):
-                                edit_leasing_dialog(row.to_dict())
-                            
-                            # 刪除按鈕
-                            if st.button("🗑️", key=f"delete_l_{row['id']}", help="刪除"):
-                                st.session_state[f"confirm_delete_l_{row['id']}"] = True
+                # 三個按鈕在同一行（表格上方）
+                col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
+                
+                # 判斷是否有選擇資料
+                has_selection = 'selected_leasing_id' in st.session_state and st.session_state['selected_leasing_id'] is not None
+                
+                with col_add:
+                    if st.button("➕ 新增租賃合約", use_container_width=True, type="primary", key="add_leasing_btn"):
+                        add_leasing_dialog()
+                
+                with col_edit:
+                    if st.button("✏️ 編輯合約", use_container_width=True, disabled=not has_selection, key="edit_leasing_btn"):
+                        if has_selection:
+                            selected_id = st.session_state['selected_leasing_id']
+                            selected_row = df[df['id'] == selected_id].iloc[0]
+                            edit_leasing_dialog(selected_row.to_dict())
+                
+                with col_delete:
+                    if st.button("🗑️ 刪除合約", use_container_width=True, disabled=not has_selection, key="delete_leasing_btn"):
+                        if has_selection:
+                            selected_id = st.session_state['selected_leasing_id']
+                            st.session_state['confirm_delete_leasing'] = selected_id
+                
+                st.divider()
+                
+                # 準備顯示用的 DataFrame
+                display_df = df.copy()
+                display_df = display_df.rename(columns={
+                    'contract_code': '合約編號',
+                    'customer_code': '客戶代碼',
+                    'customer_name': '客戶名稱',
+                    'start_date': '起始日',
+                    'model': '機型',
+                    'quantity': '台數',
+                    'monthly_rent': '月租金',
+                    'payment_cycle_months': '繳費週期(月)',
+                    'overprint': '超印',
+                    'contract_months': '合約期數(月)',
+                    'sales_company_code': '業務公司代碼',
+                    'sales_amount': '業務金額',
+                    'service_company_code': '維護公司代碼',
+                    'service_amount': '維護金額'
+                })
+                
+                # 格式化日期和金額
+                display_df['起始日'] = display_df['起始日'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else '-')
+                display_df['月租金'] = display_df['月租金'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                display_df['業務金額'] = display_df['業務金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                display_df['維護金額'] = display_df['維護金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                
+                # 顯示表格
+                selection = st.dataframe(
+                    display_df[['合約編號', '客戶代碼', '客戶名稱', '起始日', '機型', '台數', '月租金', 
+                               '繳費週期(月)', '超印', '合約期數(月)', '業務公司代碼', '業務金額', 
+                               '維護公司代碼', '維護金額']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="leasing_table"
+                )
+                
+                # 更新選擇狀態
+                if selection and selection.selection.rows:
+                    selected_idx = selection.selection.rows[0]
+                    selected_row = df.iloc[selected_idx]
+                    st.session_state['selected_leasing_id'] = selected_row['id']
+                else:
+                    st.session_state['selected_leasing_id'] = None
+                
+                # 顯示已選擇的資料
+                if 'selected_leasing_id' in st.session_state and st.session_state['selected_leasing_id'] is not None:
+                    selected_id = st.session_state['selected_leasing_id']
+                    if selected_id in df['id'].values:
+                        selected_row = df[df['id'] == selected_id].iloc[0]
+                        st.info(f"✓ 已選擇：{selected_row['contract_code']} - {selected_row['customer_name']}")
                         
                         # 刪除確認
-                        if st.session_state.get(f"confirm_delete_l_{row['id']}", False):
-                            st.warning(f"⚠️ 確定要刪除合約「{row['contract_code']}」嗎？")
-                            col_yes, col_no, col_space = st.columns([1, 1, 8])
+                        if st.session_state.get('confirm_delete_leasing') == selected_id:
+                            st.warning(f"⚠️ 確定要刪除合約「{selected_row['contract_code']}」嗎？此操作無法復原！")
+                            col_yes, col_no, col_space2 = st.columns([1, 1, 8])
                             
                             with col_yes:
-                                if st.button("✅ 確定", key=f"confirm_yes_l_{row['id']}"):
+                                if st.button("✅ 確定刪除", use_container_width=True, key="confirm_delete_leasing_yes"):
                                     try:
                                         with get_connection() as conn:
                                             with conn.cursor() as cur:
-                                                cur.execute("DELETE FROM contracts_leasing WHERE id = %s", (row['id'],))
+                                                # 刪除租賃合約
+                                                cur.execute("DELETE FROM contracts_leasing WHERE id = %s", (selected_id,))
+                                                # 刪除相關應收帳款
+                                                cur.execute("DELETE FROM ar_leasing WHERE contract_code = %s", (selected_row['contract_code'],))
                                                 conn.commit()
                                         st.success("✅ 刪除成功！")
-                                        del st.session_state[f"confirm_delete_l_{row['id']}"]
+                                        if 'confirm_delete_leasing' in st.session_state:
+                                            del st.session_state['confirm_delete_leasing']
+                                        if 'selected_leasing_id' in st.session_state:
+                                            del st.session_state['selected_leasing_id']
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"❌ 刪除失敗：{e}")
                             
                             with col_no:
-                                if st.button("❌ 取消", key=f"confirm_no_l_{row['id']}"):
-                                    del st.session_state[f"confirm_delete_l_{row['id']}"]
+                                if st.button("❌ 取消", use_container_width=True, key="confirm_delete_leasing_no"):
+                                    if 'confirm_delete_leasing' in st.session_state:
+                                        del st.session_state['confirm_delete_leasing']
                                     st.rerun()
-                        
-                        # 詳細資料展開
-                        with st.expander("📋 查看詳細資料"):
-                            col_detail1, col_detail2 = st.columns(2)
-                            
-                            with col_detail1:
-                                st.write(f"**客戶代碼：** {row['customer_code'] if row['customer_code'] else '-'}")
-                                st.write(f"**繳費週期：** {row['payment_cycle_months']} 個月" if row['payment_cycle_months'] else "**繳費週期：** -")
-                                st.write(f"**超印描述：** {row['overprint'] if row['overprint'] else '-'}")
-                                st.write(f"**業務公司代碼：** {row['sales_company_code'] if row['sales_company_code'] else '-'}")
-                                st.write(f"**業務金額：** NT$ {row['sales_amount']:,.0f}" if row['sales_amount'] else "**業務金額：** -")
-                            
-                            with col_detail2:
-                                st.write(f"**維護公司代碼：** {row['service_company_code'] if row['service_company_code'] else '-'}")
-                                st.write(f"**維護金額：** NT$ {row['service_amount']:,.0f}" if row['service_amount'] else "**維護金額：** -")
     
     except Exception as e:
         st.error(f"❌ 載入租賃合約資料失敗：{e}")
@@ -760,72 +774,106 @@ else:  # 買斷合約
             else:
                 st.write(f"共 {len(df)} 筆買斷合約")
                 
-                # 顯示每一筆合約
-                for idx, row in df.iterrows():
-                    with st.container(border=True):
-                        # 主要資訊顯示
-                        col1, col2, col3, col4, col5 = st.columns([2, 2, 1.5, 1.5, 0.8])
-                        
-                        with col1:
-                            st.write(f"**合約編號**")
-                            st.write(row['contract_code'])
-                        
-                        with col2:
-                            st.write(f"**客戶名稱**")
-                            st.write(row['customer_name'])
-                        
-                        with col3:
-                            st.write(f"**成交日期**")
-                            st.write(row['deal_date'].strftime('%Y-%m-%d') if row['deal_date'] else "-")
-                        
-                        with col4:
-                            st.write(f"**成交金額**")
-                            st.write(f"NT$ {row['deal_amount']:,.0f}" if row['deal_amount'] else "-")
-                        
-                        with col5:
-                            # 編輯按鈕
-                            if st.button("✏️", key=f"edit_b_{row['id']}", help="編輯"):
-                                edit_buyout_dialog(row.to_dict())
-                            
-                            # 刪除按鈕
-                            if st.button("🗑️", key=f"delete_b_{row['id']}", help="刪除"):
-                                st.session_state[f"confirm_delete_b_{row['id']}"] = True
+                # 三個按鈕在同一行（表格上方）
+                col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
+                
+                # 判斷是否有選擇資料
+                has_selection = 'selected_buyout_id' in st.session_state and st.session_state['selected_buyout_id'] is not None
+                
+                with col_add:
+                    if st.button("➕ 新增買斷合約", use_container_width=True, type="primary", key="add_buyout_btn"):
+                        add_buyout_dialog()
+                
+                with col_edit:
+                    if st.button("✏️ 編輯合約", use_container_width=True, disabled=not has_selection, key="edit_buyout_btn"):
+                        if has_selection:
+                            selected_id = st.session_state['selected_buyout_id']
+                            selected_row = df[df['id'] == selected_id].iloc[0]
+                            edit_buyout_dialog(selected_row.to_dict())
+                
+                with col_delete:
+                    if st.button("🗑️ 刪除合約", use_container_width=True, disabled=not has_selection, key="delete_buyout_btn"):
+                        if has_selection:
+                            selected_id = st.session_state['selected_buyout_id']
+                            st.session_state['confirm_delete_buyout'] = selected_id
+                
+                st.divider()
+                
+                # 準備顯示用的 DataFrame
+                display_df = df.copy()
+                display_df = display_df.rename(columns={
+                    'contract_code': '合約編號',
+                    'customer_code': '客戶代碼',
+                    'customer_name': '客戶名稱',
+                    'deal_date': '成交日期',
+                    'deal_amount': '成交金額',
+                    'sales_company_code': '業務公司代碼',
+                    'sales_amount': '業務金額',
+                    'service_company_code': '維護公司代碼',
+                    'service_amount': '維護金額'
+                })
+                
+                # 格式化日期和金額
+                display_df['成交日期'] = display_df['成交日期'].apply(lambda x: x.strftime('%Y-%m-%d') if pd.notna(x) else '-')
+                display_df['成交金額'] = display_df['成交金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                display_df['業務金額'] = display_df['業務金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                display_df['維護金額'] = display_df['維護金額'].apply(lambda x: f"NT$ {x:,.0f}" if pd.notna(x) else '-')
+                
+                # 顯示表格
+                selection = st.dataframe(
+                    display_df[['合約編號', '客戶代碼', '客戶名稱', '成交日期', '成交金額', 
+                               '業務公司代碼', '業務金額', '維護公司代碼', '維護金額']],
+                    use_container_width=True,
+                    hide_index=True,
+                    on_select="rerun",
+                    selection_mode="single-row",
+                    key="buyout_table"
+                )
+                
+                # 更新選擇狀態
+                if selection and selection.selection.rows:
+                    selected_idx = selection.selection.rows[0]
+                    selected_row = df.iloc[selected_idx]
+                    st.session_state['selected_buyout_id'] = selected_row['id']
+                else:
+                    st.session_state['selected_buyout_id'] = None
+                
+                # 顯示已選擇的資料
+                if 'selected_buyout_id' in st.session_state and st.session_state['selected_buyout_id'] is not None:
+                    selected_id = st.session_state['selected_buyout_id']
+                    if selected_id in df['id'].values:
+                        selected_row = df[df['id'] == selected_id].iloc[0]
+                        st.info(f"✓ 已選擇：{selected_row['contract_code']} - {selected_row['customer_name']}")
                         
                         # 刪除確認
-                        if st.session_state.get(f"confirm_delete_b_{row['id']}", False):
-                            st.warning(f"⚠️ 確定要刪除合約「{row['contract_code']}」嗎？")
-                            col_yes, col_no, col_space = st.columns([1, 1, 8])
+                        if st.session_state.get('confirm_delete_buyout') == selected_id:
+                            st.warning(f"⚠️ 確定要刪除合約「{selected_row['contract_code']}」嗎？此操作無法復原！")
+                            col_yes, col_no, col_space2 = st.columns([1, 1, 8])
                             
                             with col_yes:
-                                if st.button("✅ 確定", key=f"confirm_yes_b_{row['id']}"):
+                                if st.button("✅ 確定刪除", use_container_width=True, key="confirm_delete_buyout_yes"):
                                     try:
                                         with get_connection() as conn:
                                             with conn.cursor() as cur:
-                                                cur.execute("DELETE FROM contracts_buyout WHERE id = %s", (row['id'],))
+                                                # 刪除買斷合約
+                                                cur.execute("DELETE FROM contracts_buyout WHERE id = %s", (selected_id,))
+                                                # 刪除相關應收帳款
+                                                cur.execute("DELETE FROM ar_buyout WHERE contract_code = %s", (selected_row['contract_code'],))
                                                 conn.commit()
                                         st.success("✅ 刪除成功！")
-                                        del st.session_state[f"confirm_delete_b_{row['id']}"]
+                                        if 'confirm_delete_buyout' in st.session_state:
+                                            del st.session_state['confirm_delete_buyout']
+                                        if 'selected_buyout_id' in st.session_state:
+                                            del st.session_state['selected_buyout_id']
                                         st.rerun()
                                     except Exception as e:
                                         st.error(f"❌ 刪除失敗：{e}")
                             
                             with col_no:
-                                if st.button("❌ 取消", key=f"confirm_no_b_{row['id']}"):
-                                    del st.session_state[f"confirm_delete_b_{row['id']}"]
+                                if st.button("❌ 取消", use_container_width=True, key="confirm_delete_buyout_no"):
+                                    if 'confirm_delete_buyout' in st.session_state:
+                                        del st.session_state['confirm_delete_buyout']
                                     st.rerun()
-                        
-                        # 詳細資料展開
-                        with st.expander("📋 查看詳細資料"):
-                            col_detail1, col_detail2 = st.columns(2)
-                            
-                            with col_detail1:
-                                st.write(f"**客戶代碼：** {row['customer_code'] if row['customer_code'] else '-'}")
-                                st.write(f"**業務公司代碼：** {row['sales_company_code'] if row['sales_company_code'] else '-'}")
-                                st.write(f"**業務金額：** NT$ {row['sales_amount']:,.0f}" if row['sales_amount'] else "**業務金額：** -")
-                            
-                            with col_detail2:
-                                st.write(f"**維護公司代碼：** {row['service_company_code'] if row['service_company_code'] else '-'}")
-                                st.write(f"**維護金額：** NT$ {row['service_amount']:,.0f}" if row['service_amount'] else "**維護金額：** -")
     
     except Exception as e:
         st.error(f"❌ 載入買斷合約資料失敗：{e}")
