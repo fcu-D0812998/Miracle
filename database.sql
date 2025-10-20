@@ -67,6 +67,8 @@ CREATE TABLE contracts_leasing (
     sales_amount NUMERIC(12,2),
     service_company_code VARCHAR(50) REFERENCES companies(company_code),
     service_amount NUMERIC(12,2),
+    sales_payment_status buyout_payment_status_enum DEFAULT '未付款', -- 是否出帳
+    service_payment_status buyout_payment_status_enum DEFAULT'未付款', -- 是否出帳
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -84,6 +86,8 @@ CREATE TABLE contracts_buyout (
     sales_amount NUMERIC(12,2),
     service_company_code VARCHAR(50) REFERENCES companies(company_code),
     service_amount NUMERIC(12,2),
+    sales_payment_status buyout_payment_status_enum DEFAULT '未付款', -- 是否出帳
+    service_payment_status buyout_payment_status_enum DEFAULT'未付款', -- 是否出帳
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

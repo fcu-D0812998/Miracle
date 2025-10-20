@@ -632,25 +632,34 @@ if contract_type == "租賃合約":
                 # 三個按鈕在同一行（表格上方）
                 col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
                 
-                # 判斷是否有選擇資料
-                has_selection = 'selected_leasing_id' in st.session_state and st.session_state['selected_leasing_id'] is not None
-                
                 with col_add:
                     if st.button("➕ 新增租賃合約", use_container_width=True, type="primary", key="add_leasing_btn"):
                         add_leasing_dialog()
                 
                 with col_edit:
-                    if st.button("✏️ 編輯合約", use_container_width=True, disabled=not has_selection, key="edit_leasing_btn"):
-                        if has_selection:
+                    if st.button("✏️ 編輯合約", use_container_width=True, key="edit_leasing_btn"):
+                        # 檢查是否有選擇資料
+                        if 'selected_leasing_id' in st.session_state and st.session_state['selected_leasing_id'] is not None:
                             selected_id = st.session_state['selected_leasing_id']
-                            selected_row = df[df['id'] == selected_id].iloc[0]
-                            edit_leasing_dialog(selected_row.to_dict())
+                            if selected_id in df['id'].values:
+                                selected_row = df[df['id'] == selected_id].iloc[0]
+                                edit_leasing_dialog(selected_row.to_dict())
+                            else:
+                                st.warning("⚠️ 請先點選要編輯的合約資料")
+                        else:
+                            st.warning("⚠️ 請先點選要編輯的合約資料")
                 
                 with col_delete:
-                    if st.button("🗑️ 刪除合約", use_container_width=True, disabled=not has_selection, key="delete_leasing_btn"):
-                        if has_selection:
+                    if st.button("🗑️ 刪除合約", use_container_width=True, key="delete_leasing_btn"):
+                        # 檢查是否有選擇資料
+                        if 'selected_leasing_id' in st.session_state and st.session_state['selected_leasing_id'] is not None:
                             selected_id = st.session_state['selected_leasing_id']
-                            st.session_state['confirm_delete_leasing'] = selected_id
+                            if selected_id in df['id'].values:
+                                st.session_state['confirm_delete_leasing'] = selected_id
+                            else:
+                                st.warning("⚠️ 請先點選要刪除的合約資料")
+                        else:
+                            st.warning("⚠️ 請先點選要刪除的合約資料")
                 
                 st.divider()
                 
@@ -777,25 +786,34 @@ else:  # 買斷合約
                 # 三個按鈕在同一行（表格上方）
                 col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
                 
-                # 判斷是否有選擇資料
-                has_selection = 'selected_buyout_id' in st.session_state and st.session_state['selected_buyout_id'] is not None
-                
                 with col_add:
                     if st.button("➕ 新增買斷合約", use_container_width=True, type="primary", key="add_buyout_btn"):
                         add_buyout_dialog()
                 
                 with col_edit:
-                    if st.button("✏️ 編輯合約", use_container_width=True, disabled=not has_selection, key="edit_buyout_btn"):
-                        if has_selection:
+                    if st.button("✏️ 編輯合約", use_container_width=True, key="edit_buyout_btn"):
+                        # 檢查是否有選擇資料
+                        if 'selected_buyout_id' in st.session_state and st.session_state['selected_buyout_id'] is not None:
                             selected_id = st.session_state['selected_buyout_id']
-                            selected_row = df[df['id'] == selected_id].iloc[0]
-                            edit_buyout_dialog(selected_row.to_dict())
+                            if selected_id in df['id'].values:
+                                selected_row = df[df['id'] == selected_id].iloc[0]
+                                edit_buyout_dialog(selected_row.to_dict())
+                            else:
+                                st.warning("⚠️ 請先點選要編輯的合約資料")
+                        else:
+                            st.warning("⚠️ 請先點選要編輯的合約資料")
                 
                 with col_delete:
-                    if st.button("🗑️ 刪除合約", use_container_width=True, disabled=not has_selection, key="delete_buyout_btn"):
-                        if has_selection:
+                    if st.button("🗑️ 刪除合約", use_container_width=True, key="delete_buyout_btn"):
+                        # 檢查是否有選擇資料
+                        if 'selected_buyout_id' in st.session_state and st.session_state['selected_buyout_id'] is not None:
                             selected_id = st.session_state['selected_buyout_id']
-                            st.session_state['confirm_delete_buyout'] = selected_id
+                            if selected_id in df['id'].values:
+                                st.session_state['confirm_delete_buyout'] = selected_id
+                            else:
+                                st.warning("⚠️ 請先點選要刪除的合約資料")
+                        else:
+                            st.warning("⚠️ 請先點選要刪除的合約資料")
                 
                 st.divider()
                 

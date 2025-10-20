@@ -155,27 +155,34 @@ try:
             # 三個按鈕在同一行（表格上方）
             col_add, col_edit, col_delete, col_space = st.columns([1, 1, 1, 7])
             
-            # 需要先初始化 has_selection 和 selected_row
-            # 先顯示按鈕（狀態根據 session_state 中的選擇）
-            has_selection = 'selected_customer_id' in st.session_state and st.session_state['selected_customer_id'] is not None
-            
             with col_add:
                 if st.button("➕ 新增客戶", use_container_width=True, type="primary"):
                     add_customer_dialog()
             
             with col_edit:
-                if st.button("✏️ 編輯客戶", use_container_width=True, disabled=not has_selection):
-                    if has_selection:
-                        # 從 df 中找到選擇的資料
+                if st.button("✏️ 編輯客戶", use_container_width=True):
+                    # 檢查是否有選擇資料
+                    if 'selected_customer_id' in st.session_state and st.session_state['selected_customer_id'] is not None:
                         selected_id = st.session_state['selected_customer_id']
-                        selected_row = df[df['id'] == selected_id].iloc[0]
-                        edit_customer_dialog(selected_row.to_dict())
+                        if selected_id in df['id'].values:
+                            selected_row = df[df['id'] == selected_id].iloc[0]
+                            edit_customer_dialog(selected_row.to_dict())
+                        else:
+                            st.warning("⚠️ 請先點選要編輯的客戶資料")
+                    else:
+                        st.warning("⚠️ 請先點選要編輯的客戶資料")
             
             with col_delete:
-                if st.button("🗑️ 刪除客戶", use_container_width=True, disabled=not has_selection):
-                    if has_selection:
+                if st.button("🗑️ 刪除客戶", use_container_width=True):
+                    # 檢查是否有選擇資料
+                    if 'selected_customer_id' in st.session_state and st.session_state['selected_customer_id'] is not None:
                         selected_id = st.session_state['selected_customer_id']
-                        st.session_state['confirm_delete_selected'] = selected_id
+                        if selected_id in df['id'].values:
+                            st.session_state['confirm_delete_selected'] = selected_id
+                        else:
+                            st.warning("⚠️ 請先點選要刪除的客戶資料")
+                    else:
+                        st.warning("⚠️ 請先點選要刪除的客戶資料")
             
             st.divider()
             
