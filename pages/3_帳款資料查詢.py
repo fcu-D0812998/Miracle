@@ -1,11 +1,145 @@
 import streamlit as st
 from db_config import get_connection
 import pandas as pd
-from datetime import date
+from datetime import date, datetime
+from io import BytesIO
 
 st.set_page_config(page_title="帳款資料查詢", page_icon="💰", layout="wide")
 
 st.title("💰 帳款資料查詢")
+
+# ============================================
+# 匯出 Excel 功能
+# ============================================
+def export_to_excel(from_date, to_date):
+    """匯出所有四種帳款類型到 Excel（不同工作表）"""
+    try:
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                # ========== 查詢總應收帳款 ==========
+                # 租賃應收
+                cur.execute("""
+                    SELECT '租賃' as type, contract_code, customer_code, customer_name,
+                           start_date as date, end_date, total_rent as amount, fee,
+                           received_amount, payment_status
+                    FROM ar_leasing
+                    WHERE start_date BETWEEN %s AND %s
+                """, (from_date, to_date))
+                ar_leasing = cur.fetchall()
+                
+                # 買斷應收
+                cur.execute("""
+                    SELECT '買斷' as type, contract_code, customer_code, customer_name,
+                           deal_date as date, NULL as end_date, total_amount as amount, fee,
+                           received_amount, payment_status
+                    FROM ar_buyout
+                    WHERE deal_date BETWEEN %s AND %s
+                """, (from_date, to_date))
+                ar_buyout = cur.fetchall()
+                
+                # 合併總應收帳款
+                ar_columns = ['類型', '合約編號', '客戶代碼', '客戶名稱', '日期', '結束日期', 
+                             '金額', '手續費', '已收金額', '繳費狀況']
+                df_total_ar = pd.DataFrame(ar_leasing + ar_buyout, columns=ar_columns)
+                df_total_ar['應收總額'] = df_total_ar['金額'] + df_total_ar['手續費']
+                df_total_ar['未收金額'] = df_total_ar['應收總額'] - df_total_ar['已收金額']
+                
+                # 總未收帳款（篩選未收款）
+                df_unpaid_ar = df_total_ar[df_total_ar['繳費狀況'] != '已收款'].copy()
+                
+                # ========== 查詢未出帳款 ==========
+                # 租賃未出（業務+維護）
+                cur.execute("""
+                    SELECT contract_code, '租賃' as contract_type, customer_code, customer_name,
+                           start_date as date, '業務' as payable_type, sales_company_code as company_code,
+                           sales_amount as amount, sales_payment_status as payment_status
+                    FROM contracts_leasing
+                    WHERE start_date BETWEEN %s AND %s
+                      AND sales_payment_status != '已付款' AND sales_amount > 0
+                    UNION ALL
+                    SELECT contract_code, '租賃', customer_code, customer_name,
+                           start_date, '維護', service_company_code,
+                           service_amount, service_payment_status
+                    FROM contracts_leasing
+                    WHERE start_date BETWEEN %s AND %s
+                      AND service_payment_status != '已付款' AND service_amount > 0
+                """, (from_date, to_date, from_date, to_date))
+                unpaid_leasing = cur.fetchall()
+                
+                # 買斷未出（業務+維護）
+                cur.execute("""
+                    SELECT contract_code, '買斷' as contract_type, customer_code, customer_name,
+                           deal_date as date, '業務' as payable_type, sales_company_code as company_code,
+                           sales_amount as amount, sales_payment_status as payment_status
+                    FROM contracts_buyout
+                    WHERE deal_date BETWEEN %s AND %s
+                      AND sales_payment_status != '已付款' AND sales_amount > 0
+                    UNION ALL
+                    SELECT contract_code, '買斷', customer_code, customer_name,
+                           deal_date, '維護', service_company_code,
+                           service_amount, service_payment_status
+                    FROM contracts_buyout
+                    WHERE deal_date BETWEEN %s AND %s
+                      AND service_payment_status != '已付款' AND service_amount > 0
+                """, (from_date, to_date, from_date, to_date))
+                unpaid_buyout = cur.fetchall()
+                
+                payable_columns = ['合約編號', '類型', '客戶代碼', '客戶名稱', '日期', 
+                                  '付款對象', '公司代碼', '金額', '付款狀況']
+                df_unpaid_payable = pd.DataFrame(unpaid_leasing + unpaid_buyout, columns=payable_columns)
+                
+                # ========== 查詢已出帳款 ==========
+                # 租賃已出（業務+維護）
+                cur.execute("""
+                    SELECT contract_code, '租賃' as contract_type, customer_code, customer_name,
+                           start_date as date, '業務' as payable_type, sales_company_code as company_code,
+                           sales_amount as amount, sales_payment_status as payment_status
+                    FROM contracts_leasing
+                    WHERE start_date BETWEEN %s AND %s
+                      AND sales_payment_status = '已付款' AND sales_amount > 0
+                    UNION ALL
+                    SELECT contract_code, '租賃', customer_code, customer_name,
+                           start_date, '維護', service_company_code,
+                           service_amount, service_payment_status
+                    FROM contracts_leasing
+                    WHERE start_date BETWEEN %s AND %s
+                      AND service_payment_status = '已付款' AND service_amount > 0
+                """, (from_date, to_date, from_date, to_date))
+                paid_leasing = cur.fetchall()
+                
+                # 買斷已出（業務+維護）
+                cur.execute("""
+                    SELECT contract_code, '買斷' as contract_type, customer_code, customer_name,
+                           deal_date as date, '業務' as payable_type, sales_company_code as company_code,
+                           sales_amount as amount, sales_payment_status as payment_status
+                    FROM contracts_buyout
+                    WHERE deal_date BETWEEN %s AND %s
+                      AND sales_payment_status = '已付款' AND sales_amount > 0
+                    UNION ALL
+                    SELECT contract_code, '買斷', customer_code, customer_name,
+                           deal_date, '維護', service_company_code,
+                           service_amount, service_payment_status
+                    FROM contracts_buyout
+                    WHERE deal_date BETWEEN %s AND %s
+                      AND service_payment_status = '已付款' AND service_amount > 0
+                """, (from_date, to_date, from_date, to_date))
+                paid_buyout = cur.fetchall()
+                
+                df_paid_payable = pd.DataFrame(paid_leasing + paid_buyout, columns=payable_columns)
+        
+        # 創建 Excel 檔案
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df_total_ar.to_excel(writer, sheet_name='總應收帳款', index=False)
+            df_unpaid_ar.to_excel(writer, sheet_name='總未收帳款', index=False)
+            df_unpaid_payable.to_excel(writer, sheet_name='未出帳款', index=False)
+            df_paid_payable.to_excel(writer, sheet_name='已出帳款', index=False)
+        
+        return output.getvalue()
+    
+    except Exception as e:
+        st.error(f"❌ 匯出失敗：{e}")
+        return None
 
 # ============================================
 # 編輯應收帳款 Dialog
@@ -166,7 +300,7 @@ st.divider()
 # ============================================
 # 日期選擇器和篩選選項
 # ============================================
-col_date_from, col_date_to, col_type = st.columns([1, 1, 1])
+col_date_from, col_date_to, col_type, col_export = st.columns([1, 1, 1, 1])
 
 with col_date_from:
     from_date = st.date_input(
@@ -188,6 +322,21 @@ with col_type:
         options=["總應收帳款", "總未收帳款", "未出帳款", "已出帳款"],
         key="ar_type_select"
     )
+
+with col_export:
+    st.write("")  # 空行對齊
+    st.write("")  # 空行對齊
+    # 匯出 Excel 按鈕
+    excel_data = export_to_excel(from_date, to_date)
+    if excel_data:
+        export_filename = f"帳款資料_{datetime.now().strftime('%Y%m%d')}.xlsx"
+        st.download_button(
+            label="📥 匯出 Excel",
+            data=excel_data,
+            file_name=export_filename,
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
 
 st.divider()
 
