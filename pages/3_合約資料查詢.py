@@ -725,10 +725,10 @@ if contract_type == "租賃合約":
                                     try:
                                         with get_connection() as conn:
                                             with conn.cursor() as cur:
-                                                # 刪除租賃合約
-                                                cur.execute("DELETE FROM contracts_leasing WHERE id = %s", (selected_id,))
-                                                # 刪除相關應收帳款
+                                                # 先刪除相關應收帳款（子表）
                                                 cur.execute("DELETE FROM ar_leasing WHERE contract_code = %s", (selected_row['contract_code'],))
+                                                # 再刪除租賃合約（父表）
+                                                cur.execute("DELETE FROM contracts_leasing WHERE id = %s", (selected_id,))
                                                 conn.commit()
                                         st.success("✅ 刪除成功！")
                                         if 'confirm_delete_leasing' in st.session_state:
@@ -873,10 +873,10 @@ else:  # 買斷合約
                                     try:
                                         with get_connection() as conn:
                                             with conn.cursor() as cur:
-                                                # 刪除買斷合約
-                                                cur.execute("DELETE FROM contracts_buyout WHERE id = %s", (selected_id,))
-                                                # 刪除相關應收帳款
+                                                # 先刪除相關應收帳款（子表）
                                                 cur.execute("DELETE FROM ar_buyout WHERE contract_code = %s", (selected_row['contract_code'],))
+                                                # 再刪除買斷合約（父表）
+                                                cur.execute("DELETE FROM contracts_buyout WHERE id = %s", (selected_id,))
                                                 conn.commit()
                                         st.success("✅ 刪除成功！")
                                         if 'confirm_delete_buyout' in st.session_state:

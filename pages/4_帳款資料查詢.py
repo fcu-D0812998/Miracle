@@ -300,12 +300,12 @@ st.divider()
 # ============================================
 # 日期選擇器和篩選選項
 # ============================================
-col_date_from, col_date_to, col_type, col_export = st.columns([1, 1, 1, 1])
+col_date_from, col_date_to, col_type, col_per_page = st.columns([1, 1, 1, 1])
 
 with col_date_from:
     from_date = st.date_input(
         "起始日期",
-        value=date(date.today().year, date.today().month, 1),  # 本月第一天
+        value=date(date.today().year, date.today().month, 1),
         key="from_date_selector"
     )
 
@@ -323,11 +323,28 @@ with col_type:
         key="ar_type_select"
     )
 
+with col_per_page:
+    items_per_page = st.selectbox(
+        "每頁顯示",
+        options=[10, 20, 50, 100],
+        index=2,  # 預設選擇 50
+        key="items_per_page"
+    )
+
+# 查詢按鈕和匯出按鈕
+col_query, col_export = st.columns([1, 1])
+
+with col_query:
+    apply_date_filter = st.button("🔍 查詢", use_container_width=True, type="primary", key="apply_date_filter")
+
 with col_export:
     st.write("")  # 空行對齊
     st.write("")  # 空行對齊
-    # 匯出 Excel 按鈕
-    excel_data = export_to_excel(from_date, to_date)
+    # 匯出 Excel 按鈕（使用當前的日期範圍，如果沒有套用日期篩選則匯出全部）
+    export_from_date = from_date if apply_date_filter else date(1900, 1, 1)
+    export_to_date = to_date if apply_date_filter else date(2100, 12, 31)
+    excel_data = export_to_excel(export_from_date, export_to_date)
+    
     if excel_data:
         export_filename = f"帳款資料_{datetime.now().strftime('%Y%m%d')}.xlsx"
         st.download_button(
@@ -335,7 +352,8 @@ with col_export:
             data=excel_data,
             file_name=export_filename,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
+            use_container_width=True,
+            key="download_excel"
         )
 
 st.divider()
@@ -344,85 +362,167 @@ st.divider()
 # 載入帳款資料
 # ============================================
 try:
+    # 初始化分頁狀態
+    if 'current_page' not in st.session_state:
+        st.session_state['current_page'] = 1
+    
+    # 如果點擊查詢按鈕、改變帳款類型或改變每頁筆數，重置到第一頁
+    if ('prev_items_per_page' not in st.session_state or 
+        st.session_state.get('prev_items_per_page') != items_per_page):
+        st.session_state['current_page'] = 1
+        st.session_state['prev_items_per_page'] = items_per_page
+    
+    if apply_date_filter or 'prev_ar_type' not in st.session_state or st.session_state.get('prev_ar_type') != ar_type:
+        st.session_state['current_page'] = 1
+        st.session_state['prev_ar_type'] = ar_type
+    
     # 根據選擇的帳款類型查詢不同的資料
     if ar_type == "未出帳款":
         # 查詢未出帳款（應付帳款 - 未付款）
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # 查詢租賃合約的未出帳款（業務）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '租賃' as contract_type,
-                        customer_code,
-                        customer_name,
-                        start_date as date,
-                        '業務' as payable_type,
-                        sales_company_code as company_code,
-                        sales_amount as amount,
-                        sales_payment_status as payment_status
-                    FROM contracts_leasing
-                    WHERE start_date BETWEEN %s AND %s
-                      AND sales_payment_status != '已付款'
-                      AND sales_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE start_date BETWEEN %s AND %s
+                          AND sales_payment_status != '已付款'
+                          AND sales_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE sales_payment_status != '已付款'
+                          AND sales_amount > 0
+                    """)
                 leasing_sales_data = cur.fetchall()
                 
                 # 查詢租賃合約的未出帳款（維護）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '租賃' as contract_type,
-                        customer_code,
-                        customer_name,
-                        start_date as date,
-                        '維護' as payable_type,
-                        service_company_code as company_code,
-                        service_amount as amount,
-                        service_payment_status as payment_status
-                    FROM contracts_leasing
-                    WHERE start_date BETWEEN %s AND %s
-                      AND service_payment_status != '已付款'
-                      AND service_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE start_date BETWEEN %s AND %s
+                          AND service_payment_status != '已付款'
+                          AND service_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE service_payment_status != '已付款'
+                          AND service_amount > 0
+                    """)
                 leasing_service_data = cur.fetchall()
                 
                 # 查詢買斷合約的未出帳款（業務）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '買斷' as contract_type,
-                        customer_code,
-                        customer_name,
-                        deal_date as date,
-                        '業務' as payable_type,
-                        sales_company_code as company_code,
-                        sales_amount as amount,
-                        sales_payment_status as payment_status
-                    FROM contracts_buyout
-                    WHERE deal_date BETWEEN %s AND %s
-                      AND sales_payment_status != '已付款'
-                      AND sales_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE deal_date BETWEEN %s AND %s
+                          AND sales_payment_status != '已付款'
+                          AND sales_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE sales_payment_status != '已付款'
+                          AND sales_amount > 0
+                    """)
                 buyout_sales_data = cur.fetchall()
                 
                 # 查詢買斷合約的未出帳款（維護）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '買斷' as contract_type,
-                        customer_code,
-                        customer_name,
-                        deal_date as date,
-                        '維護' as payable_type,
-                        service_company_code as company_code,
-                        service_amount as amount,
-                        service_payment_status as payment_status
-                    FROM contracts_buyout
-                    WHERE deal_date BETWEEN %s AND %s
-                      AND service_payment_status != '已付款'
-                      AND service_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE deal_date BETWEEN %s AND %s
+                          AND service_payment_status != '已付款'
+                          AND service_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE service_payment_status != '已付款'
+                          AND service_amount > 0
+                    """)
                 buyout_service_data = cur.fetchall()
         
         # 合併所有未出帳款資料
@@ -433,79 +533,147 @@ try:
         with get_connection() as conn:
             with conn.cursor() as cur:
                 # 查詢租賃合約的已出帳款（業務）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '租賃' as contract_type,
-                        customer_code,
-                        customer_name,
-                        start_date as date,
-                        '業務' as payable_type,
-                        sales_company_code as company_code,
-                        sales_amount as amount,
-                        sales_payment_status as payment_status
-                    FROM contracts_leasing
-                    WHERE start_date BETWEEN %s AND %s
-                      AND sales_payment_status = '已付款'
-                      AND sales_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE start_date BETWEEN %s AND %s
+                          AND sales_payment_status = '已付款'
+                          AND sales_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE sales_payment_status = '已付款'
+                          AND sales_amount > 0
+                    """)
                 leasing_sales_data = cur.fetchall()
                 
                 # 查詢租賃合約的已出帳款（維護）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '租賃' as contract_type,
-                        customer_code,
-                        customer_name,
-                        start_date as date,
-                        '維護' as payable_type,
-                        service_company_code as company_code,
-                        service_amount as amount,
-                        service_payment_status as payment_status
-                    FROM contracts_leasing
-                    WHERE start_date BETWEEN %s AND %s
-                      AND service_payment_status = '已付款'
-                      AND service_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE start_date BETWEEN %s AND %s
+                          AND service_payment_status = '已付款'
+                          AND service_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '租賃' as contract_type,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_leasing
+                        WHERE service_payment_status = '已付款'
+                          AND service_amount > 0
+                    """)
                 leasing_service_data = cur.fetchall()
                 
                 # 查詢買斷合約的已出帳款（業務）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '買斷' as contract_type,
-                        customer_code,
-                        customer_name,
-                        deal_date as date,
-                        '業務' as payable_type,
-                        sales_company_code as company_code,
-                        sales_amount as amount,
-                        sales_payment_status as payment_status
-                    FROM contracts_buyout
-                    WHERE deal_date BETWEEN %s AND %s
-                      AND sales_payment_status = '已付款'
-                      AND sales_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE deal_date BETWEEN %s AND %s
+                          AND sales_payment_status = '已付款'
+                          AND sales_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '業務' as payable_type,
+                            sales_company_code as company_code,
+                            sales_amount as amount,
+                            sales_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE sales_payment_status = '已付款'
+                          AND sales_amount > 0
+                    """)
                 buyout_sales_data = cur.fetchall()
                 
                 # 查詢買斷合約的已出帳款（維護）
-                cur.execute("""
-                    SELECT 
-                        contract_code,
-                        '買斷' as contract_type,
-                        customer_code,
-                        customer_name,
-                        deal_date as date,
-                        '維護' as payable_type,
-                        service_company_code as company_code,
-                        service_amount as amount,
-                        service_payment_status as payment_status
-                    FROM contracts_buyout
-                    WHERE deal_date BETWEEN %s AND %s
-                      AND service_payment_status = '已付款'
-                      AND service_amount > 0
-                """, (from_date, to_date))
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE deal_date BETWEEN %s AND %s
+                          AND service_payment_status = '已付款'
+                          AND service_amount > 0
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            contract_code,
+                            '買斷' as contract_type,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            '維護' as payable_type,
+                            service_company_code as company_code,
+                            service_amount as amount,
+                            service_payment_status as payment_status
+                        FROM contracts_buyout
+                        WHERE service_payment_status = '已付款'
+                          AND service_amount > 0
+                    """)
                 buyout_service_data = cur.fetchall()
         
         # 合併所有已出帳款資料
@@ -514,49 +682,86 @@ try:
         # 查詢應收帳款
         with get_connection() as conn:
             with conn.cursor() as cur:
-                # 查詢租賃應收帳款（篩選日期區間）
-                cur.execute("""
-                    SELECT 
-                        id,
-                        '租賃' as type,
-                        contract_code,
-                        customer_code,
-                        customer_name,
-                        start_date as date,
-                        end_date,
-                        total_rent as amount,
-                        fee,
-                        received_amount,
-                        payment_status
-                    FROM ar_leasing
-                    WHERE start_date BETWEEN %s AND %s
-                """, (from_date, to_date))
+                # 查詢租賃應收帳款
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            id,
+                            '租賃' as type,
+                            contract_code,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            end_date,
+                            total_rent as amount,
+                            fee,
+                            received_amount,
+                            payment_status
+                        FROM ar_leasing
+                        WHERE start_date BETWEEN %s AND %s
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            id,
+                            '租賃' as type,
+                            contract_code,
+                            customer_code,
+                            customer_name,
+                            start_date as date,
+                            end_date,
+                            total_rent as amount,
+                            fee,
+                            received_amount,
+                            payment_status
+                        FROM ar_leasing
+                    """)
                 leasing_data = cur.fetchall()
                 
-                # 查詢買斷應收帳款（篩選日期區間）
-                cur.execute("""
-                    SELECT 
-                        id,
-                        '買斷' as type,
-                        contract_code,
-                        customer_code,
-                        customer_name,
-                        deal_date as date,
-                        NULL as end_date,
-                        total_amount as amount,
-                        fee,
-                        received_amount,
-                        payment_status
-                    FROM ar_buyout
-                    WHERE deal_date BETWEEN %s AND %s
-                """, (from_date, to_date))
+                # 查詢買斷應收帳款
+                if apply_date_filter:
+                    cur.execute("""
+                        SELECT 
+                            id,
+                            '買斷' as type,
+                            contract_code,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            NULL as end_date,
+                            total_amount as amount,
+                            fee,
+                            received_amount,
+                            payment_status
+                        FROM ar_buyout
+                        WHERE deal_date BETWEEN %s AND %s
+                    """, (from_date, to_date))
+                else:
+                    cur.execute("""
+                        SELECT 
+                            id,
+                            '買斷' as type,
+                            contract_code,
+                            customer_code,
+                            customer_name,
+                            deal_date as date,
+                            NULL as end_date,
+                            total_amount as amount,
+                            fee,
+                            received_amount,
+                            payment_status
+                        FROM ar_buyout
+                    """)
                 buyout_data = cur.fetchall()
         
         # 合併資料
         all_data = leasing_data + buyout_data
     
     if not all_data:
-        st.info(f"📝 {from_date.strftime('%Y-%m-%d')} ~ {to_date.strftime('%Y-%m-%d')} 沒有帳款資料")
+        if apply_date_filter:
+            st.info(f"📝 {from_date.strftime('%Y-%m-%d')} ~ {to_date.strftime('%Y-%m-%d')} 沒有帳款資料")
+        else:
+            st.info(f"📝 目前沒有 {ar_type} 資料")
     else:
         # 根據帳款類型處理不同的資料結構
         if ar_type == "未出帳款" or ar_type == "已出帳款":
@@ -573,13 +778,19 @@ try:
             
             # 顯示匯總資訊
             if ar_type == "未出帳款":
-                st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 未出帳款")
+                if apply_date_filter:
+                    st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 未出帳款")
+                else:
+                    st.subheader(f"📊 未出帳款（全部）")
                 st.metric(
                     label="💰 總未出帳款金額",
                     value=f"NT$ {total_payable:,.0f}"
                 )
             else:  # 已出帳款
-                st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 已出帳款")
+                if apply_date_filter:
+                    st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 已出帳款")
+                else:
+                    st.subheader(f"📊 已出帳款（全部）")
                 st.metric(
                     label="💰 總已出帳款金額",
                     value=f"NT$ {total_payable:,.0f}"
@@ -605,7 +816,10 @@ try:
                 total_fee = df['fee'].sum()
                 
                 # 顯示匯總資訊
-                st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總應收帳款")
+                if apply_date_filter:
+                    st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總應收帳款")
+                else:
+                    st.subheader(f"📊 總應收帳款（全部）")
                 col1, col2 = st.columns(2)
                 
                 with col1:
@@ -625,7 +839,10 @@ try:
                 total_unpaid = df['unpaid_amount'].sum()
                 
                 # 顯示匯總資訊
-                st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總未收帳款")
+                if apply_date_filter:
+                    st.subheader(f"📊 {from_date.strftime('%Y/%m/%d')} ~ {to_date.strftime('%Y/%m/%d')} 總未收帳款")
+                else:
+                    st.subheader(f"📊 總未收帳款（全部）")
                 st.metric(
                     label="💰 總未收金額",
                     value=f"NT$ {total_unpaid:,.0f}"
@@ -641,7 +858,53 @@ try:
         if len(df) == 0:
             st.warning(f"🔍 找不到符合 '{search_term}' 的帳款資料")
         else:
-            st.write(f"共 {len(df)} 筆帳款資料")
+            # 計算總筆數和總頁數
+            total_records = len(df)
+            total_pages = (total_records + items_per_page - 1) // items_per_page  # 向上取整
+            
+            # 確保當前頁數不超過總頁數
+            if st.session_state['current_page'] > total_pages:
+                st.session_state['current_page'] = total_pages if total_pages > 0 else 1
+            
+            st.write(f"共 {total_records} 筆帳款資料")
+            
+            # 分頁控制（在表格上方）
+            if total_pages > 1:
+                col_page_info, col_page_prev, col_page_num, col_page_next, col_page_space = st.columns([2, 1, 2, 1, 6])
+                
+                with col_page_info:
+                    st.write(f"第 {st.session_state['current_page']} 頁 / 共 {total_pages} 頁")
+                
+                with col_page_prev:
+                    if st.button("◀ 上一頁", use_container_width=True, key="prev_page", disabled=(st.session_state['current_page'] == 1)):
+                        st.session_state['current_page'] -= 1
+                        st.rerun()
+                
+                with col_page_num:
+                    # 頁碼選擇器
+                    page_num = st.number_input(
+                        "前往頁碼",
+                        min_value=1,
+                        max_value=total_pages,
+                        value=st.session_state['current_page'],
+                        key="page_input",
+                        label_visibility="collapsed"
+                    )
+                    if page_num != st.session_state['current_page']:
+                        st.session_state['current_page'] = page_num
+                        st.rerun()
+                
+                with col_page_next:
+                    if st.button("下一頁 ▶", use_container_width=True, key="next_page", disabled=(st.session_state['current_page'] == total_pages)):
+                        st.session_state['current_page'] += 1
+                        st.rerun()
+                
+                st.divider()
+            
+            # 根據當前頁數切片 DataFrame
+            start_idx = (st.session_state['current_page'] - 1) * items_per_page
+            end_idx = start_idx + items_per_page
+            df_paged = df.iloc[start_idx:end_idx].copy()
             
             # 編輯按鈕（表格上方）
             col_edit, col_space = st.columns([1, 9])
@@ -653,8 +916,10 @@ try:
                         # 檢查是否有選擇資料
                         if 'selected_payable_idx' in st.session_state and st.session_state['selected_payable_idx'] is not None:
                             selected_idx = st.session_state['selected_payable_idx']
-                            if selected_idx < len(df):
-                                selected_row = df.iloc[selected_idx]
+                            # 調整索引：分頁後的索引 + 當前頁的起始索引
+                            actual_idx = start_idx + selected_idx
+                            if actual_idx < len(df):
+                                selected_row = df.iloc[actual_idx]
                                 edit_payable_dialog(selected_row.to_dict())
                             else:
                                 st.warning("⚠️ 請先點選要編輯的帳款資料")
@@ -677,10 +942,10 @@ try:
             
             st.divider()
             
-            # 根據帳款類型顯示不同的表格
+            # 根據帳款類型顯示不同的表格（使用分頁後的資料）
             if ar_type in ["未出帳款", "已出帳款"]:
                 # 未出/已出帳款表格
-                display_df = df.copy()
+                display_df = df_paged.copy()
                 display_df = display_df.rename(columns={
                     'contract_code': '合約編號',
                     'contract_type': '類型',
@@ -708,7 +973,7 @@ try:
                     key="payable_table"
                 )
                 
-                # 更新選擇狀態
+                # 更新選擇狀態（使用分頁後的索引）
                 if selection and selection.selection.rows:
                     selected_idx = selection.selection.rows[0]
                     st.session_state['selected_payable_idx'] = selected_idx
@@ -718,18 +983,19 @@ try:
                 # 顯示已選擇的資料
                 if 'selected_payable_idx' in st.session_state and st.session_state['selected_payable_idx'] is not None:
                     selected_idx = st.session_state['selected_payable_idx']
-                    if selected_idx < len(df):
-                        selected_row = df.iloc[selected_idx]
+                    actual_idx = start_idx + selected_idx
+                    if actual_idx < len(df):
+                        selected_row = df.iloc[actual_idx]
                         st.info(f"✓ 已選擇：{selected_row['contract_code']} - {selected_row['customer_name']} ({selected_row['payable_type']})")
             
             else:
                 # 應收帳款表格
                 # 計算應收總額和未收金額欄位
-                df['total_receivable'] = (df['amount'].fillna(0) + df['fee'].fillna(0))
-                df['unpaid'] = df['total_receivable'] - df['received_amount'].fillna(0)
+                df_paged['total_receivable'] = (df_paged['amount'].fillna(0) + df_paged['fee'].fillna(0))
+                df_paged['unpaid'] = df_paged['total_receivable'] - df_paged['received_amount'].fillna(0)
                 
                 # 準備顯示用的 DataFrame
-                display_df = df.copy()
+                display_df = df_paged.copy()
                 display_df = display_df.rename(columns={
                     'type': '類型',
                     'contract_code': '合約編號',
@@ -765,10 +1031,10 @@ try:
                     key="ar_table"
                 )
                 
-                # 更新選擇狀態
+                # 更新選擇狀態（使用分頁後的索引）
                 if selection and selection.selection.rows:
                     selected_idx = selection.selection.rows[0]
-                    selected_row = df.iloc[selected_idx]
+                    selected_row = df_paged.iloc[selected_idx]
                     st.session_state['selected_ar_id'] = selected_row['id']
                     st.session_state['selected_ar_type'] = selected_row['type']
                 else:
@@ -782,6 +1048,37 @@ try:
                     if ((df['id'] == selected_id) & (df['type'] == selected_type)).any():
                         selected_row = df[(df['id'] == selected_id) & (df['type'] == selected_type)].iloc[0]
                         st.info(f"✓ 已選擇：{selected_row['contract_code']} - {selected_row['customer_name']} ({selected_row['type']})")
+            
+            # 分頁控制（在表格下方）
+            if total_pages > 1:
+                st.divider()
+                col_page_info2, col_page_prev2, col_page_num2, col_page_next2, col_page_space2 = st.columns([2, 1, 2, 1, 6])
+                
+                with col_page_info2:
+                    st.write(f"第 {st.session_state['current_page']} 頁 / 共 {total_pages} 頁")
+                
+                with col_page_prev2:
+                    if st.button("◀ 上一頁", use_container_width=True, key="prev_page_bottom", disabled=(st.session_state['current_page'] == 1)):
+                        st.session_state['current_page'] -= 1
+                        st.rerun()
+                
+                with col_page_num2:
+                    page_num2 = st.number_input(
+                        "前往頁碼",
+                        min_value=1,
+                        max_value=total_pages,
+                        value=st.session_state['current_page'],
+                        key="page_input_bottom",
+                        label_visibility="collapsed"
+                    )
+                    if page_num2 != st.session_state['current_page']:
+                        st.session_state['current_page'] = page_num2
+                        st.rerun()
+                
+                with col_page_next2:
+                    if st.button("下一頁 ▶", use_container_width=True, key="next_page_bottom", disabled=(st.session_state['current_page'] == total_pages)):
+                        st.session_state['current_page'] += 1
+                        st.rerun()
 
 except Exception as e:
     st.error(f"❌ 載入帳款資料失敗：{e}")

@@ -144,3 +144,12 @@ CREATE TABLE service_expense (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE bank_ledger (
+    id SERIAL PRIMARY KEY,
+    txn_date DATE NOT NULL,             -- 日期
+    payer VARCHAR(100),                 -- 匯款人
+    expense NUMERIC(12,2) DEFAULT 0,    -- 支出金額
+    income NUMERIC(12,2) DEFAULT 0,     -- 收入金額
+    note TEXT                           -- 備註
+);
